@@ -1,0 +1,7 @@
+"0","reviews_sentiment <- reviews_sentiment %>%"
+"0","  mutate(sentiment_class = case_when("
+"0","    sentiment_ai == -1 ~ ""negative"","
+"0","    sentiment_ai == 0 ~ ""neutral"","
+"0","    sentiment_ai == 1 ~ ""positive"","
+"0","    TRUE ~ NA_character_ # Use NA_character_ for missing values in character columns"
+"0","  ))"

@@ -1,0 +1,2 @@
+"0","pos_reviews <- review_ai_sentiment %>% filter(sentiment_2 == 1)"
+"0","neg_reviews <- review_ai_sentiment %>% filter(sentiment_2 == -1)"

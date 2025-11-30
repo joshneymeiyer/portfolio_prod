@@ -1,0 +1,8 @@
+"0",""
+"0","#review_ai_sentiment <- review_verified_purch %>%"
+"0","#  mutate(sentiment_2 = sapply(review_body, sentiment_ai))"
+"0",""
+"0","#write.csv(review_ai_sentiment, ""review_ai_sentiment.csv"")"
+"0",""
+"0","review_ai_sentiment <- read.csv(""review_ai_sentiment.csv"")"
+"0",""

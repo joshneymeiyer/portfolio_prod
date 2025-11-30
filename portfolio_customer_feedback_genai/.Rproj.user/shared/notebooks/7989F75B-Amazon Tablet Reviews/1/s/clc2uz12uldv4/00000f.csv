@@ -1,0 +1,8 @@
+"0","neg_categories <- chat("
+"0","  sys_content ="
+"0","       ""you are reading a list of negative comments on a tablet product review. Choose 5-10 categories that could be used to describe the things a customer did not like about the product. The category should be only 1 or 2 words. Provide your response as a comma seperated list. Do not use formatting."","
+"0","  user_content = neg_comments"
+"0","     )"
+"0",""
+"0","neg_reviews <- neg_reviews %>%"
+"0","mutate(category = map_chr(review_body, ~ classification_ai(categories = neg_categories, .)))"

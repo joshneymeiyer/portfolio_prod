@@ -1,0 +1,8 @@
+"0",""
+"0","pos_summary <- pos_reviews %>%"
+"0","  group_by(category) %>%"
+"0","  summarise(count_in_category = n()) %>%"
+"0","  arrange(desc(count_in_category))"
+"0",""
+"0",""
+"0","pos_summary"

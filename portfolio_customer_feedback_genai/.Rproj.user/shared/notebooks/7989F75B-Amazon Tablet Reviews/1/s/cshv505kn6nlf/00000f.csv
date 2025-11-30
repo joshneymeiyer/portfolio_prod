@@ -1,0 +1,2 @@
+"0","ggplot(neg_summary, aes(x = count_in_category, y = reorder(category, count_in_category)))+"
+"0","  geom_col()"

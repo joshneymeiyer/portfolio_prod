@@ -1,0 +1,30 @@
+{
+    "id": "44756071",
+    "path": "~/GitHub/portfolio_dev/portfolio_customer_feedback_genai/portfolio_customer_feedback_genai.qmd",
+    "project_path": "portfolio_customer_feedback_genai.qmd",
+    "type": "quarto_markdown",
+    "hash": "2712526556",
+    "contents": "",
+    "dirty": false,
+    "created": 1762879172531.0,
+    "source_on_save": false,
+    "relative_order": 2,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "1,56",
+        "scrollLine": "0",
+        "ignored_words": "enviroment\n",
+        "rmdVisualMode": "false",
+        "rmdVisualCollapsedChunks": "",
+        "rmdVisualModeLocation": "2:0"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1764541487,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1764541488026,
+    "read_only": false,
+    "read_only_alternatives": []
+}

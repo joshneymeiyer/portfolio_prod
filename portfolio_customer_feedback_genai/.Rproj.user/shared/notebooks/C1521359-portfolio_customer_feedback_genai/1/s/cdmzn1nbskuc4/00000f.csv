@@ -1,0 +1,6 @@
+"0","differing_sentiment <- review_ai_sentiment %>%"
+"0","  filter(sentiment == 1 & sentiment_2 == -1) %>%"
+"0","  select(review_body, sentiment, sentiment_2)"
+"0",""
+"0","datatable(differing_sentiment, options = list(pageLength = 5), escape = FALSE) %>%"
+"0","          formatStyle(columns = names(df), `font-size` = '10px')"

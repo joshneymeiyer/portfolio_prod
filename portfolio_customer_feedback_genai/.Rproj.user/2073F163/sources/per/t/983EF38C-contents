@@ -1,0 +1,258 @@
+---
+title: "Amazon Tablet Reviews"
+---
+
+# Libraries
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+```{r}
+RequiredPackages <- c("dplyr", "httr2", "purrr", "ggplot2")
+for (i in RequiredPackages) { #Installs packages if not yet installed
+  if (!require(i, character.only = TRUE)) install.packages(i)
+}
+```
+
+```{r}
+library(dplyr)
+library(httr2)
+library(purrr)
+library(ggplot2)
+
+```
+
+# Create AI Functions
+
+### OpenAI API Call Function
+
+```{r}
+
+chat <- function(sys_content, user_content) {
+  
+  api_key <- Sys.getenv("OPENAI_API_KEY")
+  
+  body <- list(model = "gpt-3.5-turbo",
+               messages = list(
+                 list(role = "system", content = sys_content),
+                 list(role = "user", content = user_content)
+               )
+  )
+  req <- request("https://api.openai.com/v1")
+  resp <-
+    req %>%
+    req_url_path_append("chat/completions") %>%
+    req_auth_bearer_token(token = api_key) %>%
+    req_headers("tontent-type" = "application/jason") %>%
+    req_body_json(body) %>%
+    req_perform()
+  
+  openai_chat_response <- resp %>% resp_body_json(simplifyVector = TRUE)
+  
+  openai_chat_response$choices$message$content
+  
+}
+  
+```
+
+### Sentiment Review Function
+
+```{r}
+sentiment_ai <- function(review) {
+
+  chat(
+  sys_content =
+       "You are reading user reviews on a tablet product. Classify the review numerically. If the review is postive then 1 of the review is neutral then 0 and if the review is negative then -1. 
+                              
+  examples: 
+  
+  works great // 1
+  great price // 1
+  constantly slow // -1
+  battery life is poor // -1
+  works for my needs // 0
+  functions as advertized // 0
+                            
+                            ",
+  user_content = review
+     )
+}
+```
+
+##### Test API - Positive example
+
+```{r}
+sentiment_ai(
+"Excellent unit.  The versatility of this tablet, besides being competitively priced is a solution to the elderly.  Poor eyesight and physical disabilities associated with age and using the supporting add on features allows the user to stay in touch with our changing world.<br />A realistic add on keyboard that you can see and use.<br />I cannot wait to use my Fire HD7 to show computer created work sheets and class instructions to my students. (HMDI) Good by to copiers and reams of paper, Farwell to those costly printer inks!<br /><br />Oh yes I have much more to gain back.  Just takes a little effort to learn more, open a book and read.<br />Noel"
+     )
+```
+
+##### Test API - Negative example
+
+```{r}
+sentiment_ai(
+"We have two kindle fires. The 7 and the 6. They will not connect to my WiFi and if I finally get them to connect it only lasts for a few minutes. I have tried everything to fix but nothing works. I will never buy another kindle fire... Amazon doesn't offer any help to fix the problem"
+     )
+```
+
+##### Test API - Neutral example
+
+```{r}
+sentiment_ai(
+"it does the job"
+     )
+```
+
+### Classification Function
+
+```{r}
+
+classification_ai <- function(string, categories) {
+
+  chat(
+  sys_content = paste0("You are reading user reviews on a tablet product. classify the review in one of the following categories: ", categories, " or OTHER. ONLY respond with these categories. Do not deviate. Do not choose more than one category"),
+  
+  user_content = string
+     )
+}
+```
+
+# Data Engineering
+
+### Read CSV
+
+```{r}
+reviews <- read.csv("tablet_reviews.csv")
+
+str(reviews)
+```
+
+### Sentiment AI
+
+```{r}
+reviews_sentiment <- reviews %>%
+  mutate(sentiment_ai = sapply(review_body, sentiment_ai))
+
+```
+
+```{r}
+reviews_sentiment <- reviews_sentiment %>%
+  mutate(sentiment_class = case_when(
+    sentiment_ai == -1 ~ "negative",
+    sentiment_ai == 0 ~ "neutral",
+    sentiment_ai == 1 ~ "positive",
+    TRUE ~ NA_character_ # Use NA_character_ for missing values in character columns
+  ))
+```
+
+### Group by sentiment
+
+```{r}
+pos_reviews <- reviews_sentiment %>% filter(sentiment_class == "positive")
+neu_reviews <- reviews_sentiment %>% filter(sentiment_class == "neutral")
+neg_reviews <- reviews_sentiment %>% filter(sentiment_class == "negative")
+```
+
+```{r}
+pos_comments <- paste(pos_reviews$review_body, collapse = "\n")
+neu_comments <- paste(neu_reviews$review_body, collapse = "\n")
+neg_comments <- paste(neg_reviews$review_body, collapse = "\n")
+
+```
+
+# Analysis
+
+### What are the top reasons for a [Positive]{.underline} review
+
+```{r}
+chat(
+  sys_content =
+       "you are reading a list of positive comments on a tablet product review. Summarize the the top 5 reasons for positive reviews with a short explanation",
+  user_content = pos_comments
+     )
+
+```
+
+```{r}
+
+pos_categories <- chat(
+  sys_content =
+       "you are reading a list of positive comments on a tablet product review. Choose 5-10 categories that could be used to describe the things a customer liked about the product. The category should be only 1 or 2 words. Provide your response as a comma seperated list. Do not use formatting.",
+  user_content = pos_comments
+     )
+
+pos_reviews <- pos_reviews %>%
+  mutate(category = map_chr(review_body, ~ classification_ai(categories = pos_categories, .)))
+
+```
+
+```{r}
+
+pos_summary <- pos_reviews %>%
+  group_by(category) %>%
+  summarise(count_in_category = n()) %>%
+  arrange(desc(count_in_category))
+
+
+pos_summary
+```
+
+```{r}
+ggplot(pos_summary, aes(x = count_in_category, y = reorder(category, count_in_category)))+
+  geom_col()
+```
+
+### What are the top reasons for a [Negative]{.underline} review
+
+```{r}
+chat(
+  sys_content =
+       "you are reading a list of negative comments on a tablet product review. Summarize the the top 5 reasons for negative reviews with a short explanation",
+  user_content = neg_comments
+     )
+
+```
+
+```{r}
+neg_categories <- chat(
+  sys_content =
+       "you are reading a list of negative comments on a tablet product review. Choose 5-10 categories that could be used to describe the things a customer did not like about the product. The category should be only 1 or 2 words. Provide your response as a comma seperated list. Do not use formatting.",
+  user_content = neg_comments
+     )
+
+neg_reviews <- neg_reviews %>%
+mutate(category = map_chr(review_body, ~ classification_ai(categories = neg_categories, .)))
+```
+
+```{r}
+neg_summary <- neg_reviews %>%
+  group_by(category) %>%
+  summarise(count_in_category = n()) %>%
+  arrange(desc(count_in_category))
+
+neg_summary
+```
+
+```{r}
+ggplot(neg_summary, aes(x = count_in_category, y = reorder(category, count_in_category)))+
+  geom_col()
+```
+
+### For customers with neutral comments, what did they like about the product
+
+```{r}
+chat(
+  sys_content =
+       "you are reading a list of neutral comments on a tablet product review. Summarize the the top things they liked/appreciated about the product",
+  user_content = neu_comments
+     )
+```
+
+### For customers with neutral comments, what did they dis-like about the product
+
+```{r}
+chat(
+  sys_content =
+       "you are reading a list of neutral comments on a tablet product review. Summarize the the top things they disliked/did not like/did not apprciate about the product",
+  user_content = neu_comments
+     )
+```

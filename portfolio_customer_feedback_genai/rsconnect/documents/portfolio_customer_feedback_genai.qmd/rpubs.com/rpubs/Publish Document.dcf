@@ -1,0 +1,10 @@
+name: Publish Document
+title:
+username:
+account: rpubs
+server: rpubs.com
+hostUrl: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/1374782/afba050c40114b94968ca69b7b1bed20
+bundleId: https://api.rpubs.com/api/v1/document/1374782/afba050c40114b94968ca69b7b1bed20
+url: http://rpubs.com/jneymeiyer/1374782
+version: 1

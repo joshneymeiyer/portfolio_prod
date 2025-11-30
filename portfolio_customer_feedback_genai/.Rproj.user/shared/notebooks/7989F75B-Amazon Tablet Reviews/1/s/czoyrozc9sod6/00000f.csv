@@ -1,0 +1,3 @@
+"0","pos_reviews <- reviews_sentiment %>% filter(sentiment_class == ""positive"")"
+"0","neu_reviews <- reviews_sentiment %>% filter(sentiment_class == ""neutral"")"
+"0","neg_reviews <- reviews_sentiment %>% filter(sentiment_class == ""negative"")"

@@ -1,0 +1,8 @@
+"0",""
+"0","# pos_reviews <- pos_reviews %>%"
+"0","#  mutate(category = map_chr(review_body, ~ classification_ai(categories = pos_categories, .)))"
+"0","# "
+"0","# write.csv(pos_reviews, ""pos_reviews.csv"")"
+"0",""
+"0","pos_reviews <- read.csv(""pos_reviews.csv"")"
+"0",""

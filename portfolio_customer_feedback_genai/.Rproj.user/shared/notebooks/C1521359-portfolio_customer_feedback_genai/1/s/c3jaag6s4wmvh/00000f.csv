@@ -1,0 +1,5 @@
+"0","#| include: false"
+"0","RequiredPackages <- c(""dplyr"", ""httr2"", ""readxl"", ""writexl"", ""purrr"", ""ggplot2"", ""DT"", ""knitr"", ""stringr"")"
+"0","for (i in RequiredPackages) { #Installs packages if not yet installed"
+"0","  if (!require(i, character.only = TRUE)) install.packages(i)"
+"0","}"

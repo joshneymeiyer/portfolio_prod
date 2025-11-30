@@ -1,0 +1,3 @@
+"0","reviews_sentiment <- reviews %>%"
+"0","  mutate(sentiment_ai = sapply(review_body, sentiment_ai))"
+"0",""

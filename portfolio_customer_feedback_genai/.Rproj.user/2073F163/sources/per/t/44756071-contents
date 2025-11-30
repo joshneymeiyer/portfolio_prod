@@ -1,0 +1,467 @@
+---
+title: "Customer Satisfaction Monitoring with Generative AI"
+format: html
+code-overflow: wrap
+---
+
+format:
+  html:
+    code-overflow: wrap
+
+
+## Overview
+
+One of the most common use cases for generative AI is to summarize a large amount of unstructured text. This is undoubtedly a time-saving tool, but usually a simple summary is not enough. We need to dig deeper to find insights that are actionable! We need to take this unstructured text and turn it into something we can quantify, prioritize and assign for someone to take action on.
+
+This demonstration will examine a data set of customer reviews of an Amazon tablet. We will take the customer feedback and run the following analysis.
+
+ - **Sentiment Analysis**: Use GenAI to determine if the review is positive, negative, and neutral
+ - **Summarization**: Use GenAI to summarize the top reasons for a positive or negative review.
+ - **Categorization**: Use GenAI to pick categories that best fit the feedback context. Organize the reviews into these categories.
+ - **Quantification/Visualization**: Visualize a quantified summary of categories that are driving different types of customer feedback.
+ 
+ The final data is also cleaned and offloaded for further visual analysis using Tableau.
+ 
+
+
+## Load Libraries
+
+```{r}
+#| include: false
+RequiredPackages <- c("dplyr", "httr2", "readxl", "writexl", "purrr", "ggplot2", "DT", "knitr", "stringr")
+for (i in RequiredPackages) { #Installs packages if not yet installed
+  if (!require(i, character.only = TRUE)) install.packages(i)
+}
+```
+
+```{r}
+library(dplyr)
+library(httr2)
+library(readxl)
+library(writexl)
+library(purrr)
+library(ggplot2)
+library(DT)
+library(knitr)
+library(stringr)
+
+```
+
+## Tablet Review Dataset
+
+For this analysis, I'm using a data set of 30K+ customer reviews of the Amazon Fire HD 7 tablet.
+
+The data includes what you might expect to see in an amazon review - such as product details, review date, star rating, comments, etc. It also already includes a binary sentiment analysis, however, I plan to do my own sentiment analysis based on the customer comments.
+
+I also notice a field to indicate if the customer is a verified purchaser. We should carefully consider if we should filter our data based on this. If our goal is to study only the experiences of purchasers, then reviews from non-verified purchasers should be filtered out. If you goal includes understanding why someone may not have purchased the product, then perhaps reviews from non-verified purchasers is helpful.
+
+The following code will read in the excel file containing this data and then uses the `str` function to explore the structure of the data.
+
+```{r}
+reviews <- readxl::read_excel("tablet_reviews.xlsx")
+
+str(reviews)
+```
+
+For this analysis I am only interested in understanding the experience of customers who actually bought the product, so lets create a new data frame with only verified purchasers. I'm also going to limit the reviews to just one month of data, which is still over 900+ reviews. I'm doing this to control my OpenAI costs. If this were a real business case, then I would use the whole data set, or at least a lot more of it. Since this is just a proof-of-concept, I will use less. However, 900 records should still plenty to give persuasive results.
+
+```{r}
+review_verified_purch <- reviews %>%
+  filter(verified_purchase == "Y") %>% 
+  filter(review_date >= "2015-08-01" & review_date <= "2015-08-31")
+```
+
+
+## OpenAI API Set-Up
+
+I'll be using OpenAI for generative AI analysis. The following is a function that will make the API call using `httr2` package. The function takes two arguments.
+
+ - `sys_content`: Content for the system role. This defines the AI models purpose and how it should respond to user input.
+ - `user_content`: Content for the user role. This is the input that the AI model should respond to.
+
+Reference this documentation to interact with the OpenAI API: <https://platform.openai.com/docs/overview>
+
+My api_key is stored as an environment variable. You can set your personal api key by running the following in the console. `Sys.setenv(OPENAI_API_KEY="your_api_key_here")`
+
+
+```{r}
+gen_ai_function <- function(sys_content, user_content) {
+  
+  api_key <- Sys.getenv("OPENAI_API_KEY")
+  
+  body <- list(model = "gpt-5-nano",
+               messages = list(
+                 list(role = "system", content = sys_content),
+                 list(role = "user", content = user_content)
+               )
+  )
+  req <- request("https://api.openai.com/v1")
+  resp <-
+    req %>%
+    req_url_path_append("chat/completions") %>%
+    req_auth_bearer_token(token = api_key) %>%
+    req_headers("tontent-type" = "application/jason") %>%
+    req_body_json(body) %>%
+    req_perform()
+  
+  gen_ai_response <- resp %>% resp_body_json(simplifyVector = TRUE)
+  
+  gen_ai_response$choices$message$content
+  
+}
+```
+
+Let's give the function a test.
+
+
+```{r}
+gen_ai_function(sys_content = "Your task is to translate engish words into french" , 
+                user_content= "Dog")
+```
+## Sentiment AI Function
+
+As mentioned previously, the data set came with a sentiment column, but it's only binary. A positive review gets a 1 and a negative gets a 0. I suggest that there is a third category needed for 'neutral' reviews. I notice many reviews that say something like "it does the job" or "it was a gift". These are neither positive or negative and should be treated differently.
+
+The new function below will take our existing `gen_ai_function` and give it a specific purpose of classifying the reviews as follows:
+
+ - 1: Positive
+ - 0: Neutral
+ - -1: Negative
+ 
+This new function, `sentiment_at` will take only one argument - `review` which is the text that needs to be reviewed and classified.
+ 
+The type of prompting below is called "few-shot" prompting. You give the AI model enough examples of each classification. It learns the pattern and it  applies what it learned to new data.
+
+```{r}
+sentiment_ai <- function(review) {
+
+  gen_ai_function(
+  sys_content =
+       "You are reading user reviews on a tablet product. Classify the review numerically. If the review is postive then 1 of the review is neutral then 0 and if the review is negative then -1. 
+                              
+  examples: 
+  
+  works great // 1
+  great price // 1
+  constantly slow // -1
+  battery life is poor // -1
+  works for my needs // 0
+  functions as advertized // 0
+                            
+                            ",
+  user_content = review
+     )
+}
+```
+
+### Testing the Sentiment AI function
+
+Let's test it with a few examples
+
+**Postive Test**
+
+```{r}
+sentiment_ai(
+"Excellent unit.  The versatility of this tablet, besides being competitively priced is a solution to the elderly.  Poor eyesight and physical disabilities associated with age and using the supporting add on features allows the user to stay in touch with our changing world.<br />A realistic add on keyboard that you can see and use.<br />I cannot wait to use my Fire HD7 to show computer created work sheets and class instructions to my students. (HMDI) Good by to copiers and reams of paper, Farwell to those costly printer inks!<br /><br />Oh yes I have much more to gain back.  Just takes a little effort to learn more, open a book and read.<br />Noel"
+     )
+```
+**Negative Test**
+
+```{r}
+sentiment_ai(
+"We have two kindle fires. The 7 and the 6. They will not connect to my WiFi and if I finally get them to connect it only lasts for a few minutes. I have tried everything to fix but nothing works. I will never buy another kindle fire... Amazon doesn't offer any help to fix the problem"
+     )
+```
+**Neutral Test**
+
+```{r}
+sentiment_ai(
+"it does the job"
+     )
+```
+
+### Applying Sentiment AI to the data set
+
+Looks like the `sentiment_ai` function is working properly. Now let's apply our sentiment analysis to all the reviews in the data set.
+
+To do this, I'll use `sapply`. This allows us to use the `sentiment_ai` function within the `mutate` dplyr function in the same way you would use mutate to create a new column based on a new calculation.
+
+I'll create a new column called sentiment_2 and use `sapply` to to run all the review_body comments through our `sentiment_ai` function.
+
+
+::: {.callout-note}
+
+Throughout this document you will notice that large OpenAI API calls are commented out (such as the code block below). These calls are expensive (~$0.15 per execution) and can take up to 30 minutes to run. Since I don't want to run the code every time this markdown document is rendered, I comment the code out after I run it once. The output is saved to a csv for safekeeping. During future runs, the data is read back in from the csv file. 
+
+:::
+
+
+```{r}
+
+#review_ai_sentiment <- review_verified_purch %>%
+#  mutate(sentiment_2 = sapply(review_body, sentiment_ai))
+
+#write.csv(review_ai_sentiment, "review_ai_sentiment.csv")
+
+review_ai_sentiment <- read.csv("review_ai_sentiment.csv")
+
+```
+
+
+### Sentiment AI Results
+
+So how did our sentiment analysis do? It seems to work quite well!. I would suggest that it is better then Amazon's sentiment analysis that came built into the data set. Recall that Amazon's analysis is column named "sentiment" and our analysis is "sentiment_2"
+
+The following table shows records where Amazon's sentiment was positive (1) and our sentiment was negative (-1). I feel like most of these  actually lean more negative, which aligns with our analysis.
+
+```{r}
+differing_sentiment <- review_ai_sentiment %>%
+  filter(sentiment == 1 & sentiment_2 == -1) %>%
+  select(review_body, sentiment, sentiment_2)
+
+datatable(differing_sentiment, options = list(pageLength = 5), escape = FALSE) %>%
+          formatStyle(columns = names(df), `font-size` = '10px')
+
+```
+
+## What are the reasons for a positive or negative review?
+
+Now that we have classified each review with the appropriate sentiment, we want to know the reasons behind a positive or negative review.
+
+First, lets separate the sentiment types into different data frames.
+
+```{r}
+pos_reviews <- review_ai_sentiment %>% filter(sentiment_2 == 1)
+neg_reviews <- review_ai_sentiment %>% filter(sentiment_2 == -1)
+```
+
+Next we will 'collapse' all the comments in the review body into single character string and seperate them with a line break `"\n"`
+
+```{r}
+pos_comments <- paste(pos_reviews$review_body, collapse = "\n")
+neg_comments <- paste(neg_reviews$review_body, collapse = "\n")
+
+```
+
+Now we can use the `gen_ai_function` to ask about the reasons for each type of sentiment.
+
+**Reasons for Positive Sentiment**
+
+```{r results='asis'}
+# pos_review_summary <- gen_ai_function(
+#   sys_content = "you are reading a list of positive comments on a tablet product review. Summarize the the top 5 reasons for positive reviews with a short explanation" ,
+#   user_content= pos_comments
+#   )
+# 
+# write.csv(pos_review_summary, "pos_review_summary.csv")
+
+pos_review_summary <- read.csv("pos_review_summary.csv")
+pos_review_summary$x
+
+```
+
+**Reasons for negative Sentiment**
+
+```{r results='asis'}
+# neg_review_summary <- gen_ai_function(
+#   sys_content = "you are reading a list of negative comments on a tablet product review. Summarize the the top 5 reasons for negative reviews with a short explanation" ,
+#   user_content= neg_comments
+#   )
+
+# write.csv(neg_review_summary, "neg_review_summary.csv")
+
+neg_review_summary <- read.csv("neg_review_summary.csv")
+neg_review_summary$x
+```
+
+## Quantifying reasons for positive or negative reviews.
+
+### Chosing categories for positive reviews
+
+The AI summaries above are great. It sure beats having to read thousands of comments. However, we probably want to break down the feedback into some categories and quantify how many comments fit each category. This would allow us to put some numbers to our strengths and weaknesses
+
+We'll start by having our `gen_ai_function` go through the positive comments and pick 10 distinct categories that would fit a majority of subjects in the comments.
+
+```{r}
+# pos_categories <- gen_ai_function(
+#   sys_content =
+#       "you are reading a list of positive comments on a tablet product review. Choose 10 categories that describe the things a customer liked about the product. The categories should be only 1 or 2 words. Do not duplicate or choose similar categories. Provide your response as a comma seperated list. Do not use formatting.",
+#    user_content = pos_comments
+#       )
+# 
+# write.csv(pos_categories, "pos_categories.csv")
+
+pos_categories <- read.csv("pos_categories.csv")
+pos_categories <- pos_categories$x
+
+print(pos_categories)
+```
+
+### Categorizing positive reviews
+
+Next I want to put all my positive reviews into the categories defined above. I will allow AI to put some into an 'other' category, but I want it to be used as sparingly as possible. I'll create another purpose built function for this called `classification_ai`.
+
+The `classification_ai` function takes two arguments
+
+ - `string`: A string of text to categorize.
+ - `catagories`: A list of categories for the AI to choose from.
+
+```{r}
+
+classification_ai <- function(string, categories) {
+
+  gen_ai_function(
+    sys_content = paste0("You are reading user reviews on a tablet product. classify the review in one of the following categories: ", categories, " or OTHER. ONLY respond with these categories. Do not deviate from these categores. Only choose OTHER when none of the other categories truly do not fit. Do not choose more than one category"),
+  
+   user_content = string
+     )
+}
+
+
+```
+
+Then I apply the `classification_ai` function to the positive reviews so that it can put each review into the defined categories.
+
+You may recall that I previously used `sapply` from the base R package to apply an AI function with `mutate`. That method wasn't working well with this new AI function, perhaps because it is more complex and takes more than one argument. After some research, I found that `map_chr` from the `purrr` package is better suited for integration with the `dplyr` verbs. It worked well in this case.
+
+```{r}
+
+# pos_reviews <- pos_reviews %>%
+#  mutate(category = map_chr(review_body, ~ classification_ai(categories = pos_categories, .)))
+# 
+# write.csv(pos_reviews, "pos_reviews.csv")
+
+pos_reviews <- read.csv("pos_reviews.csv")
+
+```
+
+Here's all the categories that were applied. Looks like the AI did a decent job at sticking to the categories we gave it, but we have deal with some formatting clean-up. In some cases the same category is duplicated with slight differences (ie: category/Category/CATEGORY)
+
+```{r}
+unique(pos_reviews$category)
+```
+The following will create a new 'cleaned' column that converts the category values to 'Title Case'. For example "APPLE" or "apple" will now be "Apple"
+
+```{r}
+pos_reviews <- pos_reviews %>%
+  mutate(category_cleaned = str_to_title(category))
+
+unique(pos_reviews$category_cleaned)
+
+```
+Now we can quantify the number of reviews in each category.
+
+```{r}
+
+pos_reviews_summary_table <- pos_reviews %>%
+  group_by(category_cleaned) %>% 
+  summarise(n_records = n()) %>%
+  arrange(-n_records)
+
+pos_reviews_summary_table
+
+```
+
+And finally, we can visualize using a bar chart.
+
+```{r}
+ggplot(pos_reviews_summary_table, aes(x = reorder(category_cleaned, n_records), y = n_records)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(
+    title = "Reasons for Positive Reviews - By Category",
+    x = "Category",
+    y = "Number of Reviews"
+  ) +
+  theme_minimal()
+```
+
+### Categorizing negative reviews
+
+I'll do the same as the above for the negative reviews
+
+```{r}
+ # neg_categories <- gen_ai_function(
+ #   sys_content =
+ #        "you are reading a list of negative comments on a tablet product review. Choose 10 categories that describe the things a customer did not like about the product. The categories should be only 1 or 2 words. Do not duplicate or choose similar categories. Provide your response as a comma seperated list. Do not use formatting.",
+ #   user_content = neg_comments
+ #      )
+ # 
+ # write.csv(neg_categories, "neg_categories.csv")
+
+neg_categories <- read.csv("neg_categories.csv")
+neg_categories <- neg_categories$x
+
+
+# neg_reviews <- neg_reviews %>%
+#   mutate(category = map_chr(review_body, ~ classification_ai(categories = neg_categories, .)))
+#  
+# write.csv(neg_reviews, "neg_reviews.csv")
+
+neg_reviews <- read.csv("neg_reviews.csv")
+
+neg_reviews <- neg_reviews %>%
+  mutate(category_cleaned = str_to_title(category))
+
+unique(neg_reviews$category_cleaned)
+```
+
+
+```{r}
+neg_reviews_summary_table <- neg_reviews %>%
+  group_by(category_cleaned) %>% 
+  summarise(n_records = n()) %>%
+  arrange(-n_records)
+
+ggplot(neg_reviews_summary_table, aes(x = reorder(category_cleaned, n_records), y = n_records)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(
+    title = "Reasons for Negative Reviews - By Category",
+    x = "Category",
+    y = "Number of Reviews"
+  ) +
+  theme_minimal()
+
+```
+
+## Tableau Dashboard
+
+In the notebook, we generated a great deal of valuable insights about this product. We need to make this information accessible to end users in a dashboard visualization, such as Tableau.
+
+In a production enviroment, we would write our transformed data to tables within a data warehouse. This would allow for live integration with visualization software.
+
+For this case, I will prepare the data for visualization and just write it to an excel spreadsheet. I'll connect Tableau to the xlsx. 
+
+Tableau Workbook: <https://public.tableau.com/views/ProductReviewswithGenerativeAI/ProductDashboard?:language=en-US&:sid=&:redirect=auth&:display_count=n&:origin=viz_share_link>
+
+
+```{r}
+
+# view_pos_reviews <- pos_reviews %>%
+#   select(marketplace, review_id, product_id, product_parent, product_title, star_rating, review_headline, review_body, review_date, sentiment_2, category_cleaned) %>%
+#   mutate(sentiment_catagory = "Positive")
+# 
+# view_neg_reviews <- neg_reviews %>%
+#   select(marketplace, review_id, product_id, product_parent, product_title, star_rating, review_headline, review_body, review_date, sentiment_2, category_cleaned) %>%
+#   mutate(sentiment_catagory = "Negative")
+# 
+# view_neu_reviews <- neu_reviews %>%
+#   select(marketplace, review_id, product_id, product_parent, product_title, star_rating, review_headline, review_body, review_date, sentiment_2) %>%
+#   mutate(category_cleaned = "Uncatagorized", sentiment_catagory = "Neutral")
+# 
+# table_reviews <- bind_rows(view_pos_reviews, view_neg_reviews, view_neu_reviews)
+# 
+# product_parent_n <- unique(table_reviews$product_parent)
+# 
+# table_review_ai_summary <- tibble(
+#   product_parent = product_parent_n, pos_review_summary = pos_review_summary$x, neg_review_summary = neg_review_summary$x
+# )
+# 
+# write_xlsx(
+#   list(table_reviews = table_reviews, table_review_ai_summary = table_review_ai_summary),
+#   path = paste0(product_parent_n, "_tableau_data.xlsx")
+# )
+
+```
+

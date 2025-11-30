@@ -1,0 +1,3 @@
+"0","pos_comments <- paste(pos_reviews$review_body, collapse = ""\n"")"
+"0","neg_comments <- paste(neg_reviews$review_body, collapse = ""\n"")"
+"0",""

@@ -1,0 +1,4 @@
+"0","RequiredPackages <- c(""dplyr"", ""httr2"", ""purrr"", ""ggplot2"")"
+"0","for (i in RequiredPackages) { #Installs packages if not yet installed"
+"0","  if (!require(i, character.only = TRUE)) install.packages(i)"
+"0","}"
